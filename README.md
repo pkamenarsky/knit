@@ -1,5 +1,7 @@
 # knit
 
+[![CircleCI](https://circleci.com/gh/pkamenarsky/knit.svg?style=svg)](https://circleci.com/gh/pkamenarsky/knit)
+
 `knit` ties the knot on data structures that reference each other by unique keys. Above all it aims to be easy to use - boilerplate is kept to a minimum and its API is as simple as it gets.
 
 ## Example

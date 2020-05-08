@@ -4,7 +4,7 @@ cabal-version: 2.0
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: a3f73e74de4908e4a2ce92d001a38d00c562780b4308cc935862bc3a25503e9d
+-- hash: b23359d8e8a07f350e877e32a0819100310d0bd925fc3697fb5bab1bbd26d751
 
 name:           knit
 version:        0.1.0.0
@@ -67,5 +67,6 @@ test-suite knit-test
       test
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      knit
+      base >=4.7 && <5
+    , knit
   default-language: Haskell2010

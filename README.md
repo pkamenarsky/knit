@@ -31,7 +31,7 @@ Let's take a look:
 ```haskell
 alice :: Person Model 'Unresolved
 alice = Person
-  { name        = Id "Alice
+  { name        = Id "Alice"
   , loves       = ForeignId "Bob"  -- this must be a String, since Model.persons.name is a String!
   , isPresident = False
   }
@@ -102,7 +102,7 @@ By supplying a `Remove` key instead the regular `Id` a record is marked for dele
 ```
 alice :: Person Model 'Unresolved
 alice = Person
-  { name        = Remove "Alice  -- mark the record for deletion
+  { name        = Remove "Alice"  -- mark the record for deletion
   , loves       = ForeignId "Bob"
   , isPresident = False
   }

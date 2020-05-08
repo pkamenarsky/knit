@@ -31,7 +31,7 @@ Let's take a look:
 ```haskell
 alice :: Person Model 'Unresolved
 alice = Person
-  { name        = Id "Alice
+  { name        = Id "Alice"
   , loves       = ForeignId "Bob"  -- this must be a String, since Model.persons.name is a String!
   , isPresident = False
   }
@@ -83,7 +83,7 @@ manualModel = Model
 
 `Lazy` is just a simple wrapper with a `get` field. Simplified it's just:
 
-```
+```haskell
 data Lazy a = { get :: a }
 ```
 
@@ -99,10 +99,10 @@ The `test` directory contains more examples, with multiple domain types.
 
 By supplying a `Remove` key instead the regular `Id` a record is marked for deletion:
 
-```
+```haskell
 alice :: Person Model 'Unresolved
 alice = Person
-  { name        = Remove "Alice  -- mark the record for deletion
+  { name        = Remove "Alice"  -- mark the record for deletion
   , loves       = ForeignId "Bob"
   , isPresident = False
   }

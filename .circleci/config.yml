@@ -10,6 +10,7 @@ jobs:
       - checkout
       - restore_cache:
           key: v1-cache-8.2.2-stack-work-{{checksum "stack.yaml"}}-{{checksum "package.yaml"}}
+      - run: stack upgrade
       - run: stack setup
       - run: stack install --test
       - save_cache:

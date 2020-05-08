@@ -1,0 +1,5 @@
+docs/_build/
+docs/venv/
+dist/
+dist-newstyle/
+.stack-work/

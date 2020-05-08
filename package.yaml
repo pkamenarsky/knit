@@ -1,0 +1,48 @@
+name:                knit
+version:             0.1.0.0
+github:              "pkamenarsky/knit"
+license:             BSD3
+author:              "Philip Kamenarsky"
+maintainer:          "p.kamenarsky@gmail.com"
+copyright:           "BSD3"
+
+extra-source-files:
+- README.md
+- ChangeLog.md
+
+# Metadata used when publishing your package
+synopsis:            Ties the knot on data structures that reference each other by unique keys.
+category:            Data Structures
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description:         Please see the README on GitHub at <https://github.com/pkamenarsky/knit#readme>
+
+library:
+  source-dirs: src
+  dependencies:
+  - generics-eot
+  - base >= 4.7 && < 5
+  - bytestring
+  - containers
+  - deepseq
+  - hashtables
+  - vector
+
+internal-libraries:
+  generics-eot:
+    source-dirs: vendor/generics-eot/src
+    dependencies:
+    - base >= 4.8 && < 5
+
+tests:
+  knit-test:
+    main:                Example.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - knit

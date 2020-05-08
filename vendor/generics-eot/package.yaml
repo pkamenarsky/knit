@@ -1,0 +1,55 @@
+name: generics-eot
+version: "0.4.0.1"
+synopsis: A library for generic programming that aims to be easy to understand
+description: "Documentation is here: <https://generics-eot.readthedocs.io/>"
+category: Generics
+maintainer: "soenkehahn@gmail.com"
+license: BSD3
+github: soenkehahn/generics-eot
+homepage: https://generics-eot.readthedocs.io/
+
+dependencies:
+  - base >= 4.8 && < 5
+
+extra-source-files:
+  - README.md
+
+ghc-options:
+  - "-Wall -fno-warn-name-shadowing"
+
+library:
+  exposed-modules:
+    - Generics.Eot
+  source-dirs:
+    - src
+
+tests:
+  spec:
+    main: Spec.hs
+    source-dirs:
+      - test
+      - src
+      - examples
+    dependencies:
+      - hspec
+      - QuickCheck
+      - interpolate
+      - doctest
+      - markdown-unlit
+    ghc-options:
+      - "-pgmL markdown-unlit"
+
+  quickcheck:
+    main: Spec.hs
+    source-dirs:
+      - test/quickcheck
+      - src
+    dependencies:
+      - hspec
+      - mockery
+      - interpolate
+      - shake
+      - directory
+      - filepath
+      - QuickCheck
+      - silently

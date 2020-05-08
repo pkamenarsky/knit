@@ -1,0 +1,3 @@
+:set -isrc -itest -iexamples -Wall -fno-warn-name-shadowing
+:set -pgmL markdown-unlit
+:set -optP-include -optP.stack-work/dist/x86_64-linux-nopie/Cabal-1.22.4.0/build/autogen/cabal_macros.h

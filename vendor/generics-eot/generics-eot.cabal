@@ -1,0 +1,98 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.31.1.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: 50d659af680069ec9917ed6a35c1ca01a40f9e83cc751ac1801a407b1e7a0602
+
+name:           generics-eot
+version:        0.4.0.1
+synopsis:       A library for generic programming that aims to be easy to understand
+description:    Documentation is here: <https://generics-eot.readthedocs.io/>
+category:       Generics
+homepage:       https://generics-eot.readthedocs.io/
+bug-reports:    https://github.com/soenkehahn/generics-eot/issues
+maintainer:     soenkehahn@gmail.com
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    README.md
+
+source-repository head
+  type: git
+  location: https://github.com/soenkehahn/generics-eot
+
+library
+  exposed-modules:
+      Generics.Eot
+  other-modules:
+      Generics.Eot.Datatype
+      Generics.Eot.Eot
+      Paths_generics_eot
+  hs-source-dirs:
+      src
+  ghc-options: -Wall -fno-warn-name-shadowing
+  build-depends:
+      base >=4.8 && <5
+  default-language: Haskell2010
+
+test-suite quickcheck
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      DatatypeSpec
+      Generics.Eot
+      Generics.Eot.Datatype
+      Generics.Eot.Eot
+      Paths_generics_eot
+  hs-source-dirs:
+      test/quickcheck
+      src
+  ghc-options: -Wall -fno-warn-name-shadowing
+  build-depends:
+      QuickCheck
+    , base >=4.8 && <5
+    , directory
+    , filepath
+    , hspec
+    , interpolate
+    , mockery
+    , shake
+    , silently
+  default-language: Haskell2010
+
+test-suite spec
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      Examples.CatamorphismsSpec
+      Examples.DocsSpec
+      Examples.MinBoundSpec
+      Examples.ToStringSpec
+      Generics.DatatypeSpec
+      Generics.Eot.Tutorial
+      Generics.Eot.TutorialSpec
+      Generics.EotSpec
+      Generics.Eot
+      Generics.Eot.Datatype
+      Generics.Eot.Eot
+      Catamorphisms
+      Docs
+      MinBound
+      ToString
+      Paths_generics_eot
+  hs-source-dirs:
+      test
+      src
+      examples
+  ghc-options: -Wall -fno-warn-name-shadowing -pgmL markdown-unlit
+  build-depends:
+      QuickCheck
+    , base >=4.8 && <5
+    , doctest
+    , hspec
+    , interpolate
+    , markdown-unlit
+  default-language: Haskell2010

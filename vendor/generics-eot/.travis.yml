@@ -1,0 +1,31 @@
+sudo: false
+
+addons:
+  apt:
+    packages:
+      - libgmp-dev
+
+env:
+  - STACK_YAML=stack-ghc-7.10.yaml
+  - STACK_YAML=stack-ghc-8.0.yaml
+  - STACK_YAML=stack-ghc-8.2.yaml
+  - STACK_YAML=stack.yaml
+  - CABAL_NEW_BUILD=true
+
+install:
+  # stack
+  - mkdir -p ~/.local/bin
+  - travis_retry curl -L https://www.stackage.org/stack/linux-x86_64 | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
+  - export PATH=~/.local/bin:$PATH
+  - stack --version
+  - stack setup --no-terminal
+  # cabal
+  - if [ -n "$CABAL_NEW_BUILD" ]; then .travis/install-cabal.sh ; fi
+
+script:
+  - .travis/run-ci.sh
+
+cache:
+  directories:
+    - $HOME/.stack
+  timeout: 1000

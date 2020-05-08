@@ -81,7 +81,7 @@ manualModel = Model
   }
 ```
 
-`Lazy` is just a simple wrapper with a `get` field. Simplified it's just:
+`Lazy` is just a simple wrapper with a `get` field:
 
 ```haskell
 data Lazy a = { get :: a }

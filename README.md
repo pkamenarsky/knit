@@ -92,3 +92,18 @@ name $ get $ loves (persons knitModel !! 0) -- "Bob"
 ```
 
 The `test` directory contains more examples, with multiple domain types.
+
+## Cascading deletes
+
+By supplying a `Remove` key instead the regular `Id` a record is marked for deletion:
+
+```
+alice :: Person Model 'Unresolved
+alice = Person
+  { name        = Remove "Alice  -- mark the record for deletion
+  , loves       = ForeignId "Bob"
+  , isPresident = False
+  }
+```
+
+This will remove the record from the resolved result, as well as *all other records that depend transitively on it*. Invalid keys (i.e. `ForeignId`s that reference non-existent `Id`s) will still throw an error when `knit`-ting a model.

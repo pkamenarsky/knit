@@ -4,7 +4,7 @@ cabal-version: 2.0
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: b23359d8e8a07f350e877e32a0819100310d0bd925fc3697fb5bab1bbd26d751
+-- hash: 9a018114683474c6cf3790641de1ab1452d949f9accab039ef8c9c01bc3dcf91
 
 name:           knit
 version:        0.1.0.0
@@ -30,7 +30,8 @@ source-repository head
 library
   exposed-modules:
       Knit
-  other-modules:
+      Paths_knit
+  autogen-modules:
       Paths_knit
   hs-source-dirs:
       src

@@ -191,6 +191,36 @@ instance {-# OVERLAPPING #-}
           | ForeignId k <- toList f
           ]
 
+instance {-# OVERLAPPING #-}
+  ( GGatherIds us
+  , KnitRecord tables r
+  ) =>
+  GGatherIds (Named field (r tables 'Unresolved), us) where
+    gGatherIds table record (Named r, us)
+      = fids <> gGatherIds table record us
+      where
+        -- only gather foreign ids here, since nested records can't be referenced anyway
+        fids =
+          [ fid
+          | fid@(EForeignId _ _ _) <- gatherIds table (toDynamic r) r
+          ]
+
+instance {-# OVERLAPPING #-}
+  ( GGatherIds us
+  , Foldable f
+  , KnitRecord tables r
+  ) =>
+  GGatherIds (Named field (f (r tables 'Unresolved)), us) where
+    gGatherIds table record (Named f, us) = fids <> gGatherIds table record us
+      where
+        -- only gather foreign ids here, since nested records can't be referenced anyway
+        fids = mconcat
+          [ [ fid
+            | fid@(EForeignId _ _ _) <- gatherIds table (toDynamic r) r
+            ]
+          | r <- toList f
+          ]
+
 -- GatherTableIds --------------------------------------------------------------
 
 class GGatherTableIds t where
@@ -224,7 +254,7 @@ instance ( GGatherTableIds ts
 data ResolveError
   = MissingIds [(TableName, FieldName, FieldValue)]
   | RepeatingIds [(TableName, FieldName, FieldValue)]
-  deriving (Generic, Show)
+  deriving (Eq, Ord, Generic, Show)
 
 instance NFData ResolveError
 
@@ -378,10 +408,21 @@ class KnitTables t where
     -> t 'Unresolved
     -> Either ResolveError (t 'Resolved)
   resolveTables extRsvMap u
+    -- | trace dbgInfo False = undefined
     | not (null repeatingIds) = Left $ RepeatingIds repeatingIds
     | [] <- missingIds = Right $ fromEot $ gResolveTables notRemovedIds rsv (toEot u)
     | otherwise = Left $ MissingIds missingIds
     where
+      -- dbgInfo = mconcat
+      --   [ "Eids: ", show eids, "\n"
+      --   , "Not removed ids: ", show notRemovedIds, "\n"
+      --   , "Record map: ", show recordMap, "\n"
+      --   , "Reverse map: ", show reverseMap, "\n"
+      --   , "Removed records: ", show removedRecords, "\n"
+      --   , "Repeating ids: ", show repeatingIds, "\n"
+      --   , "Missing ids: ", show missingIds, "\n"
+      --   ]
+
       eids = gatherTableIds u
 
       notRemovedIds =
@@ -508,4 +549,4 @@ type family Table (tables :: Mode -> *) (c :: Mode) table where
 
 knit :: KnitTables t => t 'Unresolved -> Either ResolveError (t 'Resolved)
 knit = resolveTables
-  (error "knit: inconsistent record (this is a bug, the consistency check should have caught this")
+  (\tbl k v -> error $ "knit: inconsistent record (this is a bug, the consistency check should have caught this: " <> show tbl <> ", " <> show k <> ", " <> show v)

@@ -7,7 +7,7 @@ cabal-version: 2.0
 -- hash: 9a018114683474c6cf3790641de1ab1452d949f9accab039ef8c9c01bc3dcf91
 
 name:           knit
-version:        0.2.0.0
+version:        0.3.0.0
 synopsis:       Ties the knot on data structures that reference each other by unique keys.
 description:    Please see the README on GitHub at <https://github.com/pkamenarsky/knit#readme>
 category:       Data Structures

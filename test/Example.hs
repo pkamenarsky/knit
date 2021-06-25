@@ -22,7 +22,8 @@ data Person tables m = Person
 deriving instance Show (Person Model Resolved)
 
 data Model m = Model
-  { persons :: Table Model m Person
+  { version :: String
+  , persons :: Table Model m Person
   } deriving (Generic, KnitTables)
 
 deriving instance Show (Model Resolved)
@@ -30,9 +31,10 @@ deriving instance Show (Model Resolved)
 --------------------------------------------------------------------------------
 
 model :: Model Unresolved
-model = Model
+model = Model ""
   [ Person (Id "Alice") [ ForeignId "Bob", ForeignId "cat" ]
   , Person (Id "Bob") [ ForeignId "Alice" ]
+  , Person (Remove "Bob2") [ ForeignId "Alice" ]
 
   -- You may disagree, but the cat thinks of itself as Person
   , Person (Id "cat") [ ForeignId "cat" ]
@@ -44,7 +46,7 @@ knitModel = case knit model of
   Left e -> error (show e)
 
 manualModel :: Model Resolved
-manualModel = Model
+manualModel = Model ""
   [ alice
   , bob
   , cat
@@ -57,7 +59,7 @@ manualModel = Model
 --------------------------------------------------------------------------------
 
 model2 :: Model Unresolved
-model2 = Model
+model2 = Model ""
   [ Person (Remove "Alice") [ ForeignId "Bob", ForeignId "cat" ]
   , Person (Id "Bob") [ ForeignId "Alice" ]
 
@@ -71,7 +73,7 @@ knitModel2 = case knit model2 of
   Left e -> error (show e)
 
 manualModel2 :: Model Resolved
-manualModel2 = Model
+manualModel2 = Model ""
   [ cat
   ]
   where

@@ -237,9 +237,15 @@ instance (GGatherTableIds t, GGatherTableIds u) => GGatherTableIds (Either t u) 
   gGatherTableIds (Right u) = gGatherTableIds u
 
 instance ( GGatherTableIds ts
-         , KnitRecord tables r
          , KnownSymbol table
-         ) => GGatherTableIds (Named table [r tables 'Unresolved], ts) where
+         ) => GGatherTableIds (Named table a, ts) where
+  gGatherTableIds (_, ts) = gGatherTableIds ts
+
+instance {-# OVERLAPPING #-}
+  ( GGatherTableIds ts
+  , KnitRecord tables r
+  , KnownSymbol table
+  ) => GGatherTableIds (Named table [r tables 'Unresolved], ts) where
   gGatherTableIds (Named records, ts) = (table, eids):gGatherTableIds ts
     where
       table = symbolVal (Proxy :: Proxy table)
@@ -348,6 +354,9 @@ instance GResolveTables () () where
 instance GResolveTables u t => GResolveTables (Either u Void) (Either t Void) where
   gResolveTables notRemoved rsvMap (Left u) = Left $ gResolveTables notRemoved rsvMap u
   gResolveTables _ _ _ = undefined
+
+instance GResolveTables us ts => GResolveTables (Named table a, us) (Named table a, ts) where
+  gResolveTables nr rsvMap (a, us) = (a, gResolveTables nr rsvMap us)
 
 instance
   ( GResolveTables us ts
@@ -528,7 +537,7 @@ type family LookupTableType (table :: Symbol) (eot :: *) :: (((Mode -> *) -> Mod
   LookupTableType name (Either records Eot.Void) = LookupTableType name records
   LookupTableType name (Eot.Named name [record tables recordMode], records)
     = '(record, ExpandRecord name (Eot (record tables 'Done)))
-  LookupTableType name (Eot.Named otherName [record tables recordMode], records)
+  LookupTableType name (Eot.Named otherName a, records)
     = LookupTableType name records
 
   LookupTableType name eot = TypeError ('Text "Can't lookup table type")

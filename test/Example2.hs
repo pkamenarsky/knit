@@ -13,33 +13,33 @@ import qualified GHC.Generics as G
 
 import           Knit
 
-data Person tables m = Person
+data Person m = Person
   { name :: String
-  , friend :: Maybe (ForeignId tables m "persons" "pid")
-  , employer :: Maybe (ForeignId tables m "employers" "owner")
-  , pid :: Id tables m Word64
-  , pid2 :: Id tables m String
-  , other :: Employer tables m
-  } deriving (G.Generic, KnitRecord CompanyTables)
+  , friend :: Maybe (ForeignId CompanyTables m "persons" "pid")
+  , employer :: Maybe (ForeignId CompanyTables m "employers" "owner")
+  , pid :: Id m Word64
+  , pid2 :: Id m String
+  , other :: Employer m
+  } deriving (G.Generic, KnitRecord)
 
-deriving instance Show (Person CompanyTables 'Unresolved)
-deriving instance Show (Person CompanyTables 'Resolved)
+deriving instance Show (Person 'Unresolved)
+deriving instance Show (Person 'Resolved)
 
 data MaybeList a = MaybeList [Maybe a]
   deriving (Functor, Foldable, G.Generic, Show)
 
-data Employer tables m = Employer
+data Employer m = Employer
   { address :: String
-  , employees :: MaybeList (ForeignId tables m "persons" "pid")
-  , owner :: Id tables m String
-  } deriving (G.Generic, KnitRecord CompanyTables)
+  , employees :: MaybeList (ForeignId CompanyTables m "persons" "pid")
+  , owner :: Id m String
+  } deriving (G.Generic, KnitRecord)
 
-deriving instance Show (Employer CompanyTables 'Unresolved)
-deriving instance Show (Employer CompanyTables 'Resolved)
+deriving instance Show (Employer 'Unresolved)
+deriving instance Show (Employer 'Resolved)
 
 data CompanyTables m = CompanyTables
-  { persons :: Table CompanyTables m Person
-  , employers :: Table CompanyTables m Employer
+  { persons :: [Person m]
+  , employers :: [Employer m]
   } deriving (G.Generic, KnitTables)
 
 deriving instance Show (CompanyTables 'Resolved)

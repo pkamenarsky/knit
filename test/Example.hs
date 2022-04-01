@@ -14,16 +14,16 @@ import Knit
 
 -- Stolen from https://hackage.haskell.org/package/tie-knot-0.2/docs/Data-Knot.html
 
-data Person tables m = Person
-  { name  :: Id tables m String
-  , loves :: [ForeignId tables m "persons" "name"]
-  } deriving (Generic, KnitRecord Model)
+data Person m = Person
+  { name  :: Id m String
+  , loves :: [ForeignId Model m "persons" "name"]
+  } deriving (Generic, KnitRecord)
 
-deriving instance Show (Person Model Resolved)
+deriving instance Show (Person Resolved)
 
 data Model m = Model
   { version :: String
-  , persons :: Table Model m Person
+  , persons :: [Person m]
   } deriving (Generic, KnitTables)
 
 deriving instance Show (Model Resolved)
@@ -96,6 +96,25 @@ testModel km mm = sequence_
       else error $ "  Testing " <> x <> ": failed"
   | x <- [ "Bob", "Alice", "cat" ]
   ]
+
+--------------------------------------------------------------------------------
+
+data RouteLink m = RouteLink
+  { routeLinkId :: Id m String
+  , routeLinkNext :: ForeignId Route m "routeLinks" "routeLinkId"
+  } deriving (Generic, KnitRecord)
+
+data Route m = Route
+  { routeId :: Id m String
+  , routeLinks :: [RouteLink m]
+  , routeNext :: ForeignId TXC m "routes" "routeId"
+  } deriving (Generic, KnitRecord, KnitTables)
+
+data TXC m = TXC
+  { routes :: [Route m]
+  } deriving (Generic, KnitTables)
+
+--------------------------------------------------------------------------------
 
 main :: IO ()
 main = do

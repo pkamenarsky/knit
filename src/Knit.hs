@@ -17,7 +17,6 @@ module Knit
   , KnitTables
   , Mode (..)
 
-  , Table
   , Lazy (..)
 
   , Id
@@ -29,7 +28,7 @@ module Knit
   , ResolveError (..)
 
   , knit
-  )where
+  ) where
 
 import           Control.DeepSeq (NFData)
 import qualified Control.Monad.ST as ST
@@ -70,16 +69,16 @@ data RecordId t = Id t | Remove t
 
 instance NFData t => NFData (RecordId t)
 
-type family Id (tables :: Mode -> *) (recordMode :: Mode) t where
-  Id tables 'Done t = RecordId t
-  Id tables 'Resolved t = t
-  Id tables 'Unresolved t = RecordId t
+type family Id (recordMode :: Mode) t where
+  Id 'Done t = RecordId t
+  Id 'Resolved t = t
+  Id 'Unresolved t = RecordId t
 
-data Lazy tables a = Lazy
-  { get :: a tables 'Resolved
+data Lazy a = Lazy
+  { get :: a 'Resolved
   }
 
-instance Show (Lazy tables a) where
+instance Show (Lazy a) where
   show _ = "Lazy"
 
 newtype ForeignRecordId (table :: Symbol) (field :: Symbol) t = ForeignId t
@@ -91,9 +90,7 @@ type family ForeignId (tables :: Mode -> *) (recordMode :: Mode) (table :: Symbo
     table
     field
     (LookupFieldType field (Snd (LookupTableType table (Eot (tables 'Unresolved)))))
-  ForeignId tables 'Resolved table field = Lazy
-    tables
-    (Fst (LookupTableType table (Eot (tables 'Resolved))))
+  ForeignId tables 'Resolved table field = Lazy (Fst (LookupTableType table (Eot (tables 'Resolved))))
 
 -- GatherIds -------------------------------------------------------------------
 
@@ -193,9 +190,9 @@ instance {-# OVERLAPPING #-}
 
 instance {-# OVERLAPPING #-}
   ( GGatherIds us
-  , KnitRecord tables r
+  , KnitRecord r
   ) =>
-  GGatherIds (Named field (r tables 'Unresolved), us) where
+  GGatherIds (Named field (r 'Unresolved), us) where
     gGatherIds table record (Named r, us)
       = fids <> gGatherIds table record us
       where
@@ -208,9 +205,9 @@ instance {-# OVERLAPPING #-}
 instance {-# OVERLAPPING #-}
   ( GGatherIds us
   , Foldable f
-  , KnitRecord tables r
+  , KnitRecord r
   ) =>
-  GGatherIds (Named field (f (r tables 'Unresolved)), us) where
+  GGatherIds (Named field (f (r 'Unresolved)), us) where
     gGatherIds table record (Named f, us) = fids <> gGatherIds table record us
       where
         -- only gather foreign ids here, since nested records can't be referenced anyway
@@ -243,9 +240,9 @@ instance ( GGatherTableIds ts
 
 instance {-# OVERLAPPING #-}
   ( GGatherTableIds ts
-  , KnitRecord tables r
+  , KnitRecord r
   , KnownSymbol table
-  ) => GGatherTableIds (Named table [r tables 'Unresolved], ts) where
+  ) => GGatherTableIds (Named table [r 'Unresolved], ts) where
   gGatherTableIds (Named records, ts) = (table, eids):gGatherTableIds ts
     where
       table = symbolVal (Proxy :: Proxy table)
@@ -267,6 +264,13 @@ instance NFData ResolveError
 class GResolve u r where
   gResolve
     :: (TableName -> FieldName -> FieldValue -> Dynamic)
+    -> u
+    -> r
+
+class GResolve2 u r where
+  gResolve2
+    :: (TableName -> FieldName -> FieldValue -> Dynamic)
+    -> (TableName -> FieldName -> FieldValue -> Dynamic)
     -> u
     -> r
 
@@ -293,13 +297,13 @@ instance (GResolve us rs, Functor f) => GResolve (Named x (f (RecordId u)), us) 
 instance
   ( Show u
 
-  , KnitRecord tables r
+  , KnitRecord r
   , GResolve us rs
 
   , KnownSymbol table
   , KnownSymbol field
   ) =>
-  GResolve (Named x (ForeignRecordId table field u), us) (Named x (Lazy tables r), rs) where
+  GResolve (Named x (ForeignRecordId table field u), us) (Named x (Lazy r), rs) where
     gResolve rsvMap (Named (ForeignId k), us)
       = ( Named $ Lazy $ resolve rsvMap (fromDynamic $ rsvMap table field (show k))
         , gResolve rsvMap us
@@ -311,7 +315,7 @@ instance
 instance
   ( Show u
 
-  , KnitRecord tables r
+  , KnitRecord r
   , GResolve us rs
 
   , Functor f
@@ -319,7 +323,7 @@ instance
   , KnownSymbol table
   , KnownSymbol field
   ) =>
-  GResolve (Named x (f (ForeignRecordId table field u)), us) (Named x (f (Lazy tables r)), rs) where
+  GResolve (Named x (f (ForeignRecordId table field u)), us) (Named x (f (Lazy r)), rs) where
     gResolve rsvMap (Named f, us)
       = ( Named $ flip fmap f $ \(ForeignId k) -> Lazy $ resolve rsvMap (fromDynamic $ rsvMap table field (show k))
         , gResolve rsvMap us
@@ -329,18 +333,18 @@ instance
         field = symbolVal (Proxy :: Proxy field)
 
 instance
-  ( KnitRecord tables r
+  ( KnitRecord r
   , GResolve us rs
   ) =>
-  GResolve (Named x (r tables 'Unresolved), us) (Named x (r tables 'Resolved), rs) where
+  GResolve (Named x (r 'Unresolved), us) (Named x (r 'Resolved), rs) where
     gResolve rsvMap (Named u, us) = (Named $ resolve rsvMap u, gResolve rsvMap us)
 
 instance
-  ( KnitRecord tables r
+  ( KnitRecord r
   , GResolve us rs
   , Functor f
   ) =>
-  GResolve (Named x (f (r tables 'Unresolved)), us) (Named x (f (r tables 'Resolved)), rs) where
+  GResolve (Named x (f (r 'Unresolved)), us) (Named x (f (r 'Resolved)), rs) where
     gResolve rsvMap (Named u, us) = (Named $ fmap (resolve rsvMap) u, gResolve rsvMap us)
 
 -- ResolveTables ---------------------------------------------------------------
@@ -358,10 +362,14 @@ instance GResolveTables u t => GResolveTables (Either u Void) (Either t Void) wh
 instance GResolveTables us ts => GResolveTables (Named table a, us) (Named table a, ts) where
   gResolveTables nr rsvMap (a, us) = (a, gResolveTables nr rsvMap us)
 
+instance GResolveTables us ts => GResolveTables (Named table (RecordId a), us) (Named table a, ts) where
+  gResolveTables nr rsvMap (Named (Id a), us) = (Named a, gResolveTables nr rsvMap us)
+  gResolveTables nr rsvMap (Named (Remove a), us) = (Named a, gResolveTables nr rsvMap us)
+
 instance
   ( GResolveTables us ts
-  , KnitRecord tables t 
-  ) => GResolveTables (Named table [t tables 'Unresolved], us) (Named table [t tables 'Resolved], ts) where
+  , KnitRecord t 
+  ) => GResolveTables (Named table [t 'Unresolved], us) (Named table [t 'Resolved], ts) where
     gResolveTables (notRemoved:notRemoved') rsvMap (Named ts, us)
       = (Named resolved, gResolveTables notRemoved' rsvMap us)
       where
@@ -374,29 +382,29 @@ instance
 
 -- KnitRecord ------------------------------------------------------------------
 
-class KnitRecord (tables :: Mode -> *) u where
+class KnitRecord u where
   resolve
     :: (TableName -> FieldName -> FieldValue -> Dynamic)
-    -> u tables 'Unresolved
-    -> u tables 'Resolved
+    -> u 'Unresolved
+    -> u 'Resolved
   default resolve
-    :: HasEot (u tables 'Unresolved)
-    => HasEot (u tables 'Resolved)
-    => GResolve (Eot (u tables 'Unresolved)) (Eot (u tables 'Resolved))
+    :: HasEot (u 'Unresolved)
+    => HasEot (u 'Resolved)
+    => GResolve (Eot (u 'Unresolved)) (Eot (u 'Resolved))
 
     => (TableName -> FieldName -> FieldValue -> Dynamic)
-    -> u tables 'Unresolved
-    -> u tables 'Resolved
+    -> u 'Unresolved
+    -> u 'Resolved
   resolve rsvMap = fromEot . gResolve rsvMap . toEot
 
-  gatherIds :: TableName -> Dynamic -> u tables 'Unresolved -> [EId]
+  gatherIds :: TableName -> Dynamic -> u 'Unresolved -> [EId]
   default gatherIds
-    :: HasEot (u tables 'Unresolved)
-    => GGatherIds (Eot (u tables 'Unresolved))
+    :: HasEot (u 'Unresolved)
+    => GGatherIds (Eot (u 'Unresolved))
 
     => TableName
     -> Dynamic
-    -> u tables 'Unresolved
+    -> u 'Unresolved
     -> [EId]
   gatherIds table record = gGatherIds table record . toEot
 
@@ -533,10 +541,10 @@ type family ExpandRecord (parent :: Symbol) (record :: *) where
   ExpandRecord parent (Eot.Named name (f (RecordId a)), fields) = (Eot.Named name (f a), ExpandRecord parent fields)
   ExpandRecord parent (a, fields) = ExpandRecord parent fields
 
-type family LookupTableType (table :: Symbol) (eot :: *) :: (((Mode -> *) -> Mode -> *), *) where
+type family LookupTableType (table :: Symbol) (eot :: *) :: ((Mode -> *), *) where
   LookupTableType name (Either records Eot.Void) = LookupTableType name records
-  LookupTableType name (Eot.Named name [record tables recordMode], records)
-    = '(record, ExpandRecord name (Eot (record tables 'Done)))
+  LookupTableType name (Eot.Named name [record recordMode], records)
+    = '(record, ExpandRecord name (Eot (record 'Done)))
   LookupTableType name (Eot.Named otherName a, records)
     = LookupTableType name records
 
@@ -548,11 +556,6 @@ type family LookupFieldType (field :: Symbol) (eot :: *) :: * where
   LookupFieldType name (Eot.Named name field, fields) = field
   LookupFieldType name (Eot.Named otherName field, fields) = LookupFieldType name fields
   LookupFieldType name eot = TypeError ('Text "Can't lookup field type")
-
--- Table -----------------------------------------------------------------------
-
-type family Table (tables :: Mode -> *) (c :: Mode) table where
-  Table tables r table = [table tables r]
 
 --------------------------------------------------------------------------------
 

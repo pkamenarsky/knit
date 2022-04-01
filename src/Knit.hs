@@ -10,6 +10,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module Knit
@@ -17,7 +18,6 @@ module Knit
   , KnitTables
   , Mode (..)
 
-  , Table
   , Lazy (..)
 
   , Id
@@ -29,16 +29,23 @@ module Knit
   , ResolveError (..)
 
   , knit
+
+  , ResolveErrorR (..)
+  , Resolver (..)
+  , ResolveRecord (..)
+  , RecordTable (..)
   )where
 
 import           Control.DeepSeq (NFData)
 import qualified Control.Monad.ST as ST
 
+import           Data.Bifunctor (first)
 import           Data.Foldable (Foldable, toList)
 import qualified Data.HashTable.Class as HC
 import qualified Data.HashTable.ST.Basic as H
 import qualified Data.Map as M
 import qualified Data.Set as S
+import qualified Data.Text as T
 import           Data.Maybe (catMaybes)
 import           Data.Semigroup ((<>))
 
@@ -549,13 +556,104 @@ type family LookupFieldType (field :: Symbol) (eot :: *) :: * where
   LookupFieldType name (Eot.Named otherName field, fields) = LookupFieldType name fields
   LookupFieldType name eot = TypeError ('Text "Can't lookup field type")
 
--- Table -----------------------------------------------------------------------
-
-type family Table (tables :: Mode -> *) (c :: Mode) table where
-  Table tables r table = [table tables r]
-
 --------------------------------------------------------------------------------
 
 knit :: KnitTables t => t 'Unresolved -> Either ResolveError (t 'Resolved)
 knit = resolveTables
   (\tbl k v -> error $ "knit: inconsistent record (this is a bug, the consistency check should have caught this: " <> show tbl <> ", " <> show k <> ", " <> show v)
+
+-- Custom resolvers ------------------------------------------------------------
+
+zipEither :: Semigroup e => (a -> b -> c) -> Either e a -> Either e b -> Either e c
+zipEither f (Left e) (Left g) = Left (e <> g)
+zipEither f (Left e) (Right _) = Left e
+zipEither f (Right _) (Left e) = Left e
+zipEither f (Right a) (Right b) = Right (f a b)
+
+sequenceEither :: Semigroup e => [Either e a] -> Either e [a]
+sequenceEither [] = Right []
+sequenceEither (e:es) = zipEither (:) e (sequenceEither es)
+
+data ResolveErrorR = MissingId T.Text
+  deriving (Eq, Ord, Show)
+
+data LazyR (t :: Mode -> *) = LazyR { getR :: t 'Resolved }
+
+instance Show (LazyR a) where
+  show _ = "Lazy"
+
+type family Resolver cache (recordMode :: Mode) (t :: Mode -> *) where
+  Resolver cache 'Unresolved t = cache -> Either ResolveErrorR (t 'Resolved)
+  Resolver tables 'Resolved t = LazyR t
+
+class GResolveRecord cache u t where
+  gResolveR :: cache -> u -> Either [ResolveErrorR] t
+
+instance GResolveRecord cache () () where
+  gResolveR _ _ = Right ()
+
+instance GResolveRecord cache Void Void where
+  gResolveR _ _ = undefined
+
+instance (GResolveRecord cache u r, GResolveRecord cache t s) => GResolveRecord cache (Either u t) (Either r s) where
+  gResolveR cache (Left a) = Left <$> gResolveR cache a
+  gResolveR cache (Right a) = Right <$> gResolveR cache a
+
+instance (GResolveRecord cache us rs) => GResolveRecord cache (Named x u, us) (Named x u, rs) where
+  gResolveR cache (u, us) = (u,) <$> gResolveR cache us
+
+instance (GResolveRecord cache us rs) => GResolveRecord cache (Named x (cache -> Either ResolveErrorR (u 'Resolved)), us) (Named x (LazyR u), rs) where
+  gResolveR cache (Named rsv, us) = zipEither (\u us -> (Named (LazyR u), us)) (first (:[]) $ rsv cache) (gResolveR cache us)
+
+instance (ResolveRecord cache r, GResolveRecord cache us rs) => GResolveRecord cache (Named x (r 'Unresolved), us) (Named x (r 'Resolved), rs) where
+  gResolveR cache (Named u, us) = zipEither (\u us -> (Named u, us)) (resolveR cache u) (gResolveR cache us)
+
+class ResolveRecord cache t where
+  resolveR :: cache -> t 'Unresolved -> Either [ResolveErrorR] (t 'Resolved)
+  default resolveR
+    :: HasEot (t 'Unresolved)
+    => HasEot (t 'Resolved)
+    => GResolveRecord cache (Eot (t 'Unresolved)) (Eot (t 'Resolved))
+
+    => cache
+    -> t 'Unresolved
+    -> Either [ResolveErrorR] (t 'Resolved)
+  resolveR cache t = fmap fromEot (gResolveR cache $ toEot t)
+
+--------------------------------------------------------------------------------
+
+class GRecordTable cache u t where
+  gResolveRecordTable :: cache -> u -> Either [ResolveErrorR] t
+
+instance GRecordTable cache () () where
+  gResolveRecordTable _ _ = Right ()
+
+instance GRecordTable cache Void Void where
+  gResolveRecordTable _ _ = undefined
+
+instance (GRecordTable cache u r, GRecordTable cache t s) => GRecordTable cache (Either u t) (Either r s) where
+  gResolveRecordTable cache (Left a) = Left <$> gResolveRecordTable cache a
+  gResolveRecordTable cache (Right a) = Right <$> gResolveRecordTable cache a
+
+instance (ResolveRecord cache u, GRecordTable cache us rs) => GRecordTable cache (Named x [u 'Unresolved], us) (Named x [u 'Resolved], rs) where
+  gResolveRecordTable cache (Named u, us) = zipEither
+    (\u us -> (Named u, us))
+    (sequenceEither $ map (resolveR cache) u)
+    (gResolveRecordTable cache us)
+
+class RecordTable cache t where
+  resolveRecordTable :: (t 'Resolved -> cache) -> t 'Unresolved -> Either [ResolveErrorR] (t 'Resolved)
+  default resolveRecordTable
+    :: HasEot (t 'Unresolved)
+    => HasEot (t 'Resolved)
+    => GRecordTable cache (Eot (t 'Unresolved)) (Eot (t 'Resolved))
+
+    => (t 'Resolved -> cache)
+    -> t 'Unresolved
+    -> Either [ResolveErrorR] (t 'Resolved)
+  resolveRecordTable buildCache t = rsv
+    where
+      rsv = fmap fromEot (gResolveRecordTable cache $ toEot t)
+      cache = case rsv of
+        Left e -> error (show e)
+        Right rsv' -> buildCache rsv'

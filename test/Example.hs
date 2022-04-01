@@ -5,10 +5,13 @@
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
 module Main where
 
+import Data.List (find)
 import GHC.Generics
 import Knit
 
@@ -23,7 +26,7 @@ deriving instance Show (Person Model Resolved)
 
 data Model m = Model
   { version :: String
-  , persons :: Table Model m Person
+  , persons :: [Person Model m]
   } deriving (Generic, KnitTables)
 
 deriving instance Show (Model Resolved)
@@ -104,3 +107,34 @@ main = do
 
   putStrLn "Testing model2..."
   testModel knitModel2 manualModel2
+
+data PersonCache = PersonCache
+  { persons' :: [Person' 'Resolved]
+  } deriving (Generic)
+
+data Person' m = Person'
+  { name' :: String
+  , employer :: Resolver PersonCache m Person'
+  } deriving (Generic, ResolveRecord PersonCache)
+
+deriving instance Show (Person' Resolved)
+
+data PersonTable m = PersonTable
+  { personRecs :: [Person' m]
+  } deriving (Generic, RecordTable PersonCache)
+
+deriving instance Show (PersonTable Resolved)
+
+personTable :: PersonTable 'Unresolved
+personTable = PersonTable
+  { personRecs =
+      [ Person' "y" (resolvePerson "x")
+      , Person' "x" (resolvePerson "y")
+      ]
+  }
+  where
+    resolvePerson name cache = case find (\p -> name' p == name) (persons' cache) of
+      Nothing -> Left $ MissingId "no id"
+      Just x -> Right x
+
+rsv = resolveRecordTable (\t -> PersonCache (personRecs t)) personTable

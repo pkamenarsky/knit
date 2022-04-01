@@ -38,8 +38,8 @@ deriving instance Show (Employer CompanyTables 'Unresolved)
 deriving instance Show (Employer CompanyTables 'Resolved)
 
 data CompanyTables m = CompanyTables
-  { persons :: Table CompanyTables m Person
-  , employers :: Table CompanyTables m Employer
+  { persons :: [Person CompanyTables m]
+  , employers :: [Employer CompanyTables m]
   } deriving (G.Generic, KnitTables)
 
 deriving instance Show (CompanyTables 'Resolved)

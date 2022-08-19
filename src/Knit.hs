@@ -1,35 +1,21 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Knit
-  ( KnitRecord
-  , KnitTables
-  , Mode (..)
-
-  , Table
-  , Lazy (..)
-
-  , Id
-  , ForeignId
-
-  , RecordId (..)
-  , ForeignRecordId (..)
-
-  , ResolveError (..)
-
-  , knit
-  )where
+module Knit where
 
 import           Control.DeepSeq (NFData)
 import qualified Control.Monad.ST as ST
@@ -261,6 +247,8 @@ data ResolveError
   = MissingIds [(TableName, FieldName, FieldValue)]
   | RepeatingIds [(TableName, FieldName, FieldValue)]
   deriving (Eq, Ord, Generic, Show)
+
+instance Semigroup ResolveError
 
 instance NFData ResolveError
 
@@ -559,3 +547,114 @@ type family Table (tables :: Mode -> *) (c :: Mode) table where
 knit :: KnitTables t => t 'Unresolved -> Either ResolveError (t 'Resolved)
 knit = resolveTables
   (\tbl k v -> error $ "knit: inconsistent record (this is a bug, the consistency check should have caught this: " <> show tbl <> ", " <> show k <> ", " <> show v)
+
+--------------------------------------------------------------------------------
+
+newtype ID (a :: (Mode -> *) -> Mode -> *) = ID { unID :: String }
+  deriving (Eq, Ord, Show)
+
+type family FID m t a where
+  FID 'Unresolved t a = (t 'Unresolved -> Maybe ResolveError, t 'Resolved -> a t 'Resolved)
+  FID 'Resolved t a   = a t 'Resolved
+
+-- GGather
+class GGather t a where
+  gGatherErrors  :: t 'Unresolved -> a -> [ResolveError]
+
+instance GGather t Void where
+  gGatherErrors t _ = undefined
+
+instance GGather t () where
+  gGatherErrors t () = []
+
+instance (GGather t a, GGather t b) => GGather t (Either a b) where
+  gGatherErrors t (Left a)  = gGatherErrors t a
+  gGatherErrors t (Right b) = gGatherErrors t b
+
+instance GGather t as => GGather t (Named x a, as) where
+  gGatherErrors t (Named _, as) = gGatherErrors t as
+
+instance {-# OVERLAPPING #-} GGather t as => GGather t (Named x (t 'Unresolved -> Maybe ResolveError, t 'Resolved -> a t 'Resolved), as) where
+  gGatherErrors t (Named (gather, _), as) = catMaybes [gather t] <> gGatherErrors t as
+
+-- instance {-# OVERLAPPING #-} (Traversable f, Applicative f, GGather t as) => GGather t (Named x (f (t 'Unresolved -> Maybe ResolveError, t 'Resolved -> a t 'Resolved)), as) where
+--   gGatherErrors t (Named f, as) = (\(gather, _) -> gather t) (sequenceA f) -- <> undefined -- gGatherErrors t as
+
+-- GResolveRecord
+class GResolveRecord t a b where
+  gResolveRecord :: t 'Resolved -> a -> b
+
+instance GResolveRecord t Void Void where
+  gResolveRecord t _ = undefined
+
+instance GResolveRecord t () () where
+  gResolveRecord t () = ()
+
+instance (GResolveRecord t a b, GResolveRecord t c d) => GResolveRecord t (Either a c) (Either b d) where
+  gResolveRecord t (Left a)  = Left $ gResolveRecord t a
+  gResolveRecord t (Right b) = Right $ gResolveRecord t b
+
+instance GResolveRecord t as bs => GResolveRecord t (Named x a, as) (Named x a, bs) where
+  gResolveRecord t (Named a, as) = (Named a, gResolveRecord t as)
+
+instance {-# OVERLAPPING #-} GResolveRecord t as bs => GResolveRecord t (Named x (t 'Unresolved -> Maybe ResolveError, t 'Resolved -> a t 'Resolved), as) (Named x (a t 'Resolved), bs) where
+  gResolveRecord t (Named (_, resolve), as) = (Named (resolve t), gResolveRecord t as)
+
+class ResolveRecord t a where
+  resolveRecord :: t 'Unresolved -> t 'Resolved -> a t 'Unresolved -> Either [ResolveError] (a t 'Resolved)
+  default resolveRecord
+    :: HasEot (a t 'Unresolved)
+    => HasEot (a t 'Resolved)
+    => GResolveRecord t (Eot (a t 'Unresolved)) (Eot (a t 'Resolved))
+    => GGather t (Eot (a t 'Unresolved))
+    => t 'Unresolved
+    -> t 'Resolved
+    -> a t 'Unresolved
+    -> Either [ResolveError] (a t 'Resolved)
+  resolveRecord tu tr a = case gGatherErrors tu (toEot a) of
+    [] -> Right $ fromEot $ gResolveRecord tr (toEot a)
+    es -> Left es
+
+--------------------------------------------------------------------------------
+
+data Person tables m = Person
+  { pId      :: ID Person
+  -- , pFriends :: [FID m tables Person]
+  , pFriend  :: FID m tables Person
+  } deriving (Generic, ResolveRecord Model)
+
+deriving instance Show (Person Model 'Resolved)
+
+data Model m = Model
+  { persons :: M.Map (ID Person) (Person Model m)
+  }
+
+lkup :: ID a -> (forall m. t m -> M.Map (ID a) (a t m)) -> (t 'Unresolved -> Maybe ResolveError, t 'Resolved -> a t 'Resolved)
+lkup k get =
+  ( \m -> case M.lookup k (get m) of
+      Nothing -> Just (MissingIds [])
+      Just _ -> Nothing
+  , \m -> fromJust $ M.lookup k (get m)
+  )
+  where
+    fromJust (Just a) = a
+
+chain
+  :: (t 'Unresolved -> Maybe ResolveError, t 'Resolved -> a t 'Resolved)
+  -> (a t 'Unresolved -> Maybe ResolveError, a t 'Resolved -> b t 'Resolved)
+  -> (t 'Unresolved -> Maybe ResolveError, t 'Resolved -> b t 'Resolved)
+chain = undefined
+
+model :: Model 'Unresolved
+model = Model
+  { persons = M.fromList
+      [ (ID "id1", Person (ID "id1") (lkup (ID "id2") persons))
+      , (ID "id2", Person (ID "id2") (lkup (ID "id1") persons))
+      ]
+  }
+
+fromRight (Right a) = a
+
+rsvModel = case sequence $ fmap (resolveRecord model (fromRight rsvModel)) (persons model) of
+  Left e  -> Left e
+  Right a -> Right $ Model { persons = a }

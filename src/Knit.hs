@@ -550,12 +550,14 @@ knit = resolveTables
 
 --------------------------------------------------------------------------------
 
-newtype ID (a :: (Mode -> *) -> Mode -> *) = ID { unID :: String }
+newtype ID (a :: Mode -> *) = ID { unID :: String }
   deriving (Eq, Ord, Show)
 
+data Lookup a b = Lookup (a 'Unresolved -> Maybe ResolveError) (forall m. a m -> b m)
+
 type family FID m t a where
-  FID 'Unresolved t a = (t 'Unresolved -> Maybe ResolveError, t 'Resolved -> a t 'Resolved)
-  FID 'Resolved t a   = a t 'Resolved
+  FID 'Unresolved t a = Lookup t a
+  FID 'Resolved t a   = a 'Resolved
 
 -- GGather
 class GGather t a where
@@ -574,8 +576,8 @@ instance (GGather t a, GGather t b) => GGather t (Either a b) where
 instance GGather t as => GGather t (Named x a, as) where
   gGatherErrors t (Named _, as) = gGatherErrors t as
 
-instance {-# OVERLAPPING #-} GGather t as => GGather t (Named x (t 'Unresolved -> Maybe ResolveError, t 'Resolved -> a t 'Resolved), as) where
-  gGatherErrors t (Named (gather, _), as) = catMaybes [gather t] <> gGatherErrors t as
+instance {-# OVERLAPPING #-} GGather t as => GGather t (Named x (Lookup t a), as) where
+  gGatherErrors t (Named (Lookup gather _), as) = catMaybes [gather t] <> gGatherErrors t as
 
 -- instance {-# OVERLAPPING #-} (Traversable f, Applicative f, GGather t as) => GGather t (Named x (f (t 'Unresolved -> Maybe ResolveError, t 'Resolved -> a t 'Resolved)), as) where
 --   gGatherErrors t (Named f, as) = (\(gather, _) -> gather t) (sequenceA f) -- <> undefined -- gGatherErrors t as
@@ -597,53 +599,60 @@ instance (GResolveRecord t a b, GResolveRecord t c d) => GResolveRecord t (Eithe
 instance GResolveRecord t as bs => GResolveRecord t (Named x a, as) (Named x a, bs) where
   gResolveRecord t (Named a, as) = (Named a, gResolveRecord t as)
 
-instance {-# OVERLAPPING #-} GResolveRecord t as bs => GResolveRecord t (Named x (t 'Unresolved -> Maybe ResolveError, t 'Resolved -> a t 'Resolved), as) (Named x (a t 'Resolved), bs) where
-  gResolveRecord t (Named (_, resolve), as) = (Named (resolve t), gResolveRecord t as)
+instance {-# OVERLAPPING #-} GResolveRecord t as bs => GResolveRecord t (Named x (Lookup t a), as) (Named x (a 'Resolved), bs) where
+  gResolveRecord t (Named (Lookup _ resolve), as) = (Named (resolve t), gResolveRecord t as)
 
 class ResolveRecord t a where
-  resolveRecord :: t 'Unresolved -> t 'Resolved -> a t 'Unresolved -> Either [ResolveError] (a t 'Resolved)
+  resolveRecord :: t 'Unresolved -> t 'Resolved -> a 'Unresolved -> Either [ResolveError] (a 'Resolved)
   default resolveRecord
-    :: HasEot (a t 'Unresolved)
-    => HasEot (a t 'Resolved)
-    => GResolveRecord t (Eot (a t 'Unresolved)) (Eot (a t 'Resolved))
-    => GGather t (Eot (a t 'Unresolved))
+    :: HasEot (a 'Unresolved)
+    => HasEot (a 'Resolved)
+    => GResolveRecord t (Eot (a 'Unresolved)) (Eot (a 'Resolved))
+    => GGather t (Eot (a 'Unresolved))
     => t 'Unresolved
     -> t 'Resolved
-    -> a t 'Unresolved
-    -> Either [ResolveError] (a t 'Resolved)
+    -> a 'Unresolved
+    -> Either [ResolveError] (a 'Resolved)
   resolveRecord tu tr a = case gGatherErrors tu (toEot a) of
     [] -> Right $ fromEot $ gResolveRecord tr (toEot a)
     es -> Left es
 
 --------------------------------------------------------------------------------
 
-data Person tables m = Person
-  { pId      :: ID Person
+data Person m = Person
+  { pId       :: ID Person
   -- , pFriends :: [FID m tables Person]
-  , pFriend  :: FID m tables Person
+  , pFriend   :: FID m Model Person
+  -- , pServices :: M.Map String Line
+  -- , pService  :: FID m Model Line
   } deriving (Generic, ResolveRecord Model)
 
-deriving instance Show (Person Model 'Resolved)
+deriving instance Show (Person 'Resolved)
+
+data Line = Line String
 
 data Model m = Model
-  { persons :: M.Map (ID Person) (Person Model m)
+  { persons :: M.Map (ID Person) (Person m)
   }
 
-lkup :: ID a -> (forall m. t m -> M.Map (ID a) (a t m)) -> (t 'Unresolved -> Maybe ResolveError, t 'Resolved -> a t 'Resolved)
-lkup k get =
+lkup :: ID b -> (forall m. a m -> M.Map (ID b) (b m)) -> Lookup a b
+lkup k get = Lookup
   ( \m -> case M.lookup k (get m) of
       Nothing -> Just (MissingIds [])
       Just _ -> Nothing
-  , \m -> fromJust $ M.lookup k (get m)
+  )
+  ( \m -> fromJust $ M.lookup k (get m)
   )
   where
     fromJust (Just a) = a
 
-chain
-  :: (t 'Unresolved -> Maybe ResolveError, t 'Resolved -> a t 'Resolved)
-  -> (a t 'Unresolved -> Maybe ResolveError, a t 'Resolved -> b t 'Resolved)
-  -> (t 'Unresolved -> Maybe ResolveError, t 'Resolved -> b t 'Resolved)
-chain = undefined
+chain :: Lookup a b -> Lookup b c -> Lookup a c
+chain (Lookup check1 rsv1) (Lookup check2 rsv2) = Lookup
+  ( \m -> case check1 m of
+       Nothing -> check2 (rsv1 m)
+       Just  e -> Just e
+  )
+  (rsv2 . rsv1)
 
 model :: Model 'Unresolved
 model = Model
@@ -652,6 +661,15 @@ model = Model
       , (ID "id2", Person (ID "id2") (lkup (ID "id1") persons))
       ]
   }
+  where
+    services1 = M.fromList
+      [ (ID "line1", Line "L1")
+      , (ID "line2", Line "L2")
+      ]
+    services2 = M.fromList
+      [ (ID "line3", Line "L3")
+      , (ID "line4", Line "L4")
+      ]
 
 fromRight (Right a) = a
 

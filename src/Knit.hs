@@ -1,6 +1,5 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DefaultSignatures #-}
-{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -491,7 +490,12 @@ class KnitTables t where
         [ case M.lookup (table, field, show k) recordMap of
             Nothing -> Just (table, field, show k)
             Just _ -> Nothing
-        | (_, [(_, _, fids)]) <- M.toList recordMap
+        | (_, records) <- eids
+        , record <- records
+        , let fids =
+                [ fid
+                | fid@(EForeignId _ _ _) <- record
+                ]
         , EForeignId table field k <- fids
         ]
 
@@ -609,6 +613,9 @@ instance {-# OVERLAPPING #-} (ResolveRecord t a, GResolveRecord t as bs) => GRes
 instance {-# OVERLAPPING #-} (Functor f, ResolveRecord t a, GResolveRecord t as bs) => GResolveRecord t (Named x (f (a 'Unresolved)), as) (Named x (f (a 'Resolved)), bs) where
   gResolveRecord t (Named a, as) = (Named (resolveRecord t <$> a), gResolveRecord t as)
 
+instance {-# OVERLAPPING #-} (Functor f, Functor g, ResolveRecord t a, GResolveRecord t as bs) => GResolveRecord t (Named x (g (f (a 'Unresolved))), as) (Named x (g (f (a 'Resolved))), bs) where
+  gResolveRecord t (Named a, as) = (Named (fmap (resolveRecord t) <$> a), gResolveRecord t as)
+
 instance {-# OVERLAPPING #-} GResolveRecord t as bs => GResolveRecord t (Named x (Lookup t a), as) (Named x (a 'Resolved), bs) where
   gResolveRecord t (Named (Lookup _ resolve), as) = (Named (resolve t), gResolveRecord t as)
 
@@ -635,73 +642,7 @@ class ResolveRecord t a where
     -> a 'Resolved
   resolveRecord t = fromEot . gResolveRecord t . toEot
 
---------------------------------------------------------------------------------
-
-type MultiMap k v = M.Map k [v]
-
-data Person m = Person
-  { pId       :: ID Person
-  , pFriends  :: [FID m Model Person]
-  , pFriend   :: FID m Model Person
-  , pOther    :: Maybe (Person m)
-  , pService  :: FID m Model Line
-  , pServices :: M.Map (ID Line) (Line m)
-  } deriving (Generic, ResolveRecord Model)
-
-deriving instance Show (Person 'Resolved)
-
-data Line m = Line { lineName :: String }
-  deriving (Generic, ResolveRecord Model, Show)
-
-data Model m = Model
-  { persons :: M.Map (ID Person) (Person m)
-  } deriving (Generic, ResolveRecord Model)
-
-lkup :: String -> ID b -> (forall m. a m -> M.Map (ID b) (b m)) -> Lookup a b
-lkup path k@(ID k') get = Lookup
-  ( \m -> case M.lookup k (get m) of
-      Nothing -> Just (MissingIds [("", path, k')])
-      Just _ -> Nothing
-  )
-  ( \m -> fromJust $ M.lookup k (get m)
-  )
-  where
-    fromJust (Just a) = a
-
-chain :: Lookup a b -> Lookup b c -> Lookup a c
-chain (Lookup check1 rsv1) (Lookup check2 rsv2) = Lookup
-  ( \m -> case check1 m of
-       Nothing -> check2 (rsv1 m)
-       Just  e -> Just e
-  )
-  (rsv2 . rsv1)
-
-model :: Model 'Unresolved
-model = Model
-  { persons = M.fromList
-      [ (ID "id1", person1)
-      , (ID "id2", person2)
-      ]
-  }
-  where
-    person1 = Person (ID "id1") [] (lkup "persons" (ID "id2") persons) (Just person2) (lkup "persons" (ID "id2") persons `chain` lkup ("persons.id2") (ID "line3") pServices) services1
-    person2 = Person (ID "id2") [] (lkup "persons" (ID "id1") persons) Nothing (lkup "persons" (ID "id1") persons `chain` lkup ("persons.id1") (ID "line2") pServices) services2
-
-    services1 = M.fromList
-      [ (ID "line1", Line "L1")
-      , (ID "line2", Line "L2")
-      ]
-    services2 = M.fromList
-      [ (ID "line3", Line "L3")
-      , (ID "line4", Line "L4")
-      ]
-
-fromRight (Right a) = a
-
-rsvModel = case traverse (gatherErrors model) (persons model) of
-  [] -> Right $ Model { persons = fmap (resolveRecord (fromRight rsvModel)) (persons model) }
-  es -> Left es
-
-rsvModel2 = case gatherErrors model model of
-  [] -> Right (resolveRecord (fromRight $ rsvModel2) model)
-  es -> Left es
+-- class Functor2 f m where
+--   fmap2 :: (a -> b) -> f m a -> f m b
+-- 
+-- instance Functor f => ResolveRecord t (f a) where

@@ -4,32 +4,17 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Knit
-  ( KnitRecord
-  , KnitTables
-  , Mode (..)
-
-  , Table
-  , Lazy (..)
-
-  , Id
-  , ForeignId
-
-  , RecordId (..)
-  , ForeignRecordId (..)
-
-  , ResolveError (..)
-
-  , knit
-  )where
+module Knit where
 
 import           Control.DeepSeq (NFData)
 import qualified Control.Monad.ST as ST
@@ -505,7 +490,12 @@ class KnitTables t where
         [ case M.lookup (table, field, show k) recordMap of
             Nothing -> Just (table, field, show k)
             Just _ -> Nothing
-        | (_, [(_, _, fids)]) <- M.toList recordMap
+        | (_, records) <- eids
+        , record <- records
+        , let fids =
+                [ fid
+                | fid@(EForeignId _ _ _) <- record
+                ]
         , EForeignId table field k <- fids
         ]
 
